@@ -1,0 +1,6 @@
+node_modules/
+.superpowers/
+dist/
+.DS_Store
+fonts for tests/
+Implementazioni da fare.txt

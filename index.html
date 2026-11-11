@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Font Checker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/src/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Font Checker</h1>
+    <div class="topbar-actions">
+      <button id="load-btn" class="btn hidden" type="button">Load another font</button>
+      <button id="idml-btn" class="btn hidden" type="button">Export InDesign (.idml)</button>
+      <button id="export-btn" class="btn btn-primary hidden" type="button">Export specimen + font</button>
+    </div>
+  </header>
+
+  <div id="drop-zone" class="drop-zone">
+    <p class="drop-hint">Drop a font file anywhere, or click to browse</p>
+    <p class="drop-subhint">.otf · .ttf · variable fonts</p>
+  </div>
+
+  <div id="status" class="status hidden"></div>
+
+  <div id="workspace" class="workspace hidden">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2 class="panel-label">Display</h2>
+        <div class="control-group">
+          <div class="control-header">
+            <label for="font-size">Font size</label>
+            <span id="font-size-value" class="control-value">120</span>
+          </div>
+          <input type="range" id="font-size" min="12" max="250" value="120">
+        </div>
+        <div class="control-group">
+          <div class="control-header">
+            <label for="line-spacing">Line spacing</label>
+            <span id="line-spacing-value" class="control-value">1.4</span>
+          </div>
+          <input type="range" id="line-spacing" min="0.5" max="2.0" step="0.1" value="1.4">
+        </div>
+        <div class="control-group">
+          <div class="control-header">
+            <label for="letter-spacing">Letter spacing</label>
+            <span id="letter-spacing-value" class="control-value">0</span>
+          </div>
+          <input type="range" id="letter-spacing" min="-100" max="300" step="5" value="0">
+        </div>
+      </section>
+
+      <section id="fvar-panel" class="panel hidden">
+        <h2 class="panel-label">Variable axes</h2>
+        <div id="fvar-controls"></div>
+      </section>
+
+      <details id="info-details" class="drawer">
+        <summary><span>Font info</span><span id="info-badge" class="badge"></span></summary>
+        <div class="drawer-body">
+          <form id="info-form" class="info-form" autocomplete="off">
+            <label class="field">
+              <span class="field-key">Family name</span>
+              <input id="edit-family" type="text" placeholder="Missing">
+            </label>
+            <label class="field">
+              <span class="field-key">Style name</span>
+              <input id="edit-style" type="text" placeholder="Missing">
+            </label>
+            <label class="field">
+              <span class="field-key">Font name <span class="field-hint">(full name)</span></span>
+              <input id="edit-fullname" type="text" placeholder="Missing">
+            </label>
+            <label class="field">
+              <span class="field-key">Author</span>
+              <input id="edit-author" type="text" placeholder="Missing">
+            </label>
+            <label class="field">
+              <span class="field-key">License</span>
+              <textarea id="edit-license" rows="3" placeholder="Missing"></textarea>
+            </label>
+          </form>
+          <table id="info-table" class="info-table"></table>
+          <p class="drawer-note">Font name follows family + style until you edit it. All edits are written into the font when you export.</p>
+        </div>
+      </details>
+
+      <details id="coverage-details" class="drawer">
+        <summary><span>Glyph coverage</span><span id="coverage-badge" class="badge"></span></summary>
+        <div id="coverage-body" class="drawer-body"></div>
+      </details>
+    </aside>
+
+    <main class="preview">
+      <section class="preview-block">
+        <h2 class="panel-label">Characters</h2>
+        <div id="chars"></div>
+      </section>
+
+      <section class="preview-block">
+        <h2 class="panel-label">Pangram</h2>
+        <div id="pangram-text" class="preview-text"></div>
+      </section>
+
+      <section class="preview-block">
+        <h2 class="panel-label">Custom preview</h2>
+        <input type="text" id="preview-input" class="preview-input" placeholder="Type something to preview">
+        <div id="preview-text" class="preview-text"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="pdf-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="A4 specimen preview">
+    <div class="modal-bar">
+      <span id="pdf-status" class="modal-status">Building specimen…</span>
+      <div class="modal-actions">
+        <button id="pdf-download" class="btn btn-primary" type="button" disabled>Download folder (.zip)</button>
+        <button id="pdf-close" class="btn" type="button">Close</button>
+      </div>
+    </div>
+    <div id="pdf-pages" class="modal-pages"></div>
+  </div>
+</body>
+</html>
