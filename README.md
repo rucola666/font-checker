@@ -7,6 +7,7 @@ A browser tool for type design students. Drop in an `.otf` or `.ttf` font to:
 - **Edit** family name, style name, full font name, author and license; the changes are written into the font.
 - **Export** a 4-page A4 PDF specimen plus the updated font, as one folder.
 - **Export** an InDesign (`.idml`) version of the specimen with live text and paragraph styles, plus a `Document Fonts` folder.
+- **Export sources**: a variable font becomes a `.designspace` with one UFO master at the default and at each end of every axis; a static font becomes one UFO. Outlines, widths, names and metrics are recovered; features, kerning and hinting are not.
 
 Everything runs in the browser; fonts are never uploaded. The export libraries (pdf-lib, fontkit, pdf.js) load from jsDelivr when first used.
 

@@ -34,6 +34,22 @@ const PARAGRAPHS = [
   'Designing a typeface is a long conversation between the single glyph and the whole alphabet. A curve that looks right in isolation may feel heavy next to its neighbours; a detail that sparkles at display sizes may clog at text sizes. That is why designers print, look, adjust and print again. A specimen puts the font in front of the eye at several scales at once, from the single letter to the running paragraph, so that inconsistencies in weight, width and spacing become visible. Look for dark spots where letters collide, gaps where the rhythm breaks, and characters that seem to belong to another family. Then go back to the drawing and refine it.',
 ]
 
+// Versions with figures, used when the font has all ten digits 0–9.
+// Each one stays a pangram, so the letters are all still shown.
+const PANGRAMS_FIGURES = [
+  'The quick brown fox jumps over the lazy dog at 7:45.',
+  'Sphinx of black quartz, judge my 23 vows.',
+  'THE FIVE BOXING WIZARDS JUMP QUICKLY, 1906 TIMES.',
+  'Pack my box with five dozen (60) liquor jugs.',
+  'How vexingly quick daft zebras jump! All 8 of them.',
+]
+
+const PARAGRAPHS_FIGURES = [
+  'Type is the voice of written language. Each of the 26 letters carries a decision about weight, rhythm and proportion, and together those decisions make a texture the reader feels before reading a single word.',
+  'A good text face disappears into the reading. Counters stay open, spacing keeps an even colour across the line, and the letters work together so that words are recognised at a glance. Testing a font at real sizes, at 9, 12 or 24 points, in real paragraphs, is the only way to see whether it holds together.',
+  'Designing a typeface is a long conversation between the single glyph and the whole alphabet. Since Gutenberg printed his Bible around 1455, every type designer has faced it. A curve that looks right in isolation may feel heavy next to its neighbours; a detail that sparkles at 72 points may clog at 10. That is why designers print, look, adjust and print again, sometimes 30 or 40 times. A specimen puts the font in front of the eye at several scales at once, from the single letter to the running paragraph, so that inconsistencies in weight, width and spacing become visible. Look for dark spots where letters collide, gaps where the rhythm breaks, and characters that seem to belong to another family. Then go back to the drawing and refine it.',
+]
+
 // While a specimen is being built, every text and rule drawn is also recorded
 // here, so the same layout can be exported as an InDesign (IDML) document.
 let REC = null
@@ -209,7 +225,30 @@ function layoutFlow(face, blocks, top, bottom) {
     if (y >= bottom) break
     k *= 0.97
   }
+  // Still too long at the minimum size (very wide fonts): drop lines from the
+  // last running-text block so nothing falls into the footer.
+  let overflow = bottom - (plan.length ? plan[plan.length - 1].y - blockHeight(plan[plan.length - 1]) : bottom)
+  const last = plan[plan.length - 1]
+  if (overflow > 0 && last && (last.cols || (last.lines && last.lines.length > 1 && !last.fit))) {
+    const drop = Math.ceil(overflow / last.leading)
+    if (last.cols) {
+      const all = [...last.cols[0], ...last.cols[1]]
+      const rows = Math.max(1, Math.ceil(all.length / 2) - drop)
+      const kept = all.slice(0, rows * 2)
+      last.cols = [kept.slice(0, rows), kept.slice(rows)]
+      const col = last.cols[1].length ? last.cols[1] : last.cols[0]
+      col[col.length - 1] = `${col[col.length - 1].replace(/[\s.,;:!?]*$/, '')}…`
+    } else {
+      last.lines = last.lines.slice(0, Math.max(1, last.lines.length - drop))
+      last.lines[last.lines.length - 1] = `${last.lines[last.lines.length - 1].replace(/[\s.,;:!?]*$/, '')}…`
+    }
+  }
   return plan
+}
+
+function blockHeight(b) {
+  if (b.cols) return Math.max(b.cols[0].length, b.cols[1].length) * b.leading
+  return b.lines.length * b.leading
 }
 
 function drawFlow(page, face, plan, labels, ink, grey) {
@@ -258,6 +297,14 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
   let font = createFont(new Uint8Array(buffer))
   if (font.fonts) font = font.fonts[0]                 // collections: first face
   const settings = axisSettings || {}
+  const axesInfo = font.variationAxes || {}          // { tag: { name, min, default, max } }
+  const axisName = (tag) => (axesInfo[tag] && axesInfo[tag].name) || tag
+  const fmt = (v) => String(Math.round(v * 10) / 10)
+  // e.g. "Weight 650 · Width 80" — shown in every caption of a variable font
+  const axisCaption = Object.keys(axesInfo).length
+    ? Object.keys(axesInfo).map((tag) => `${axisName(tag)} ${fmt(tag in settings ? settings[tag] : axesInfo[tag].default)}`).join(' · ')
+    : ''
+  const withAxes = (text) => (axisCaption ? `${text} · ${axisCaption}` : text)
   if (font.variationAxes && Object.keys(font.variationAxes).length && Object.keys(settings).length) {
     try { font = font.getVariation(settings) } catch { /* fall back to default instance */ }
   }
@@ -269,6 +316,9 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
   const mode = caseMode(has)
   const adapt = (t) => adaptText(t, has, mode)
   const present = (chars) => [...chars].filter(has)
+  const hasFigures = [...'0123456789'].every(has)
+  const pangramTexts = hasFigures ? PANGRAMS_FIGURES : PANGRAMS
+  const paragraphTexts = hasFigures ? PARAGRAPHS_FIGURES : PARAGRAPHS
   const coverage = [
     ['Uppercase', present(UPPER)],
     ['Lowercase', present(LOWER)],
@@ -300,7 +350,7 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
   }
 
   const notes = []
-  if (Object.keys(settings).length) notes.push(Object.entries(settings).map(([k, v]) => `${k} ${Math.round(v * 10) / 10}`).join(' · '))
+  if (axisCaption) notes.push(axisCaption)
   if (tracking) notes.push(`letter spacing ${tracking}`)
   const TOTAL = 4
   const contentW = W - 2 * M
@@ -340,6 +390,10 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
       ['Manufacturer', metadata.manufacturer],
       ['License', metadata.license],
       ['Format', metadata.format],
+      ...Object.keys(axesInfo).map((tag) => [
+        axisName(tag),
+        `${fmt(axesInfo[tag].min)}–${fmt(axesInfo[tag].max)}, shown at ${fmt(tag in settings ? settings[tag] : axesInfo[tag].default)}`,
+      ]),
     ].filter(([, v]) => v && String(v).trim())
       .map(([k, v]) => {
         let lines = wrap(labels, String(v).replace(/\s+/g, ' '), valSize, colW - keyW)
@@ -412,7 +466,7 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
     const sizes = { Uppercase: 38, Lowercase: 38, Figures: 38, Punctuation: 30 }
     const blocks = coverage.map(([label, chars]) => ({
       text: chars.join(''), chars: true, size: sizes[label], leading: 1.6, style: label,
-      gapAfter: 26, label, labelGap: 22,
+      gapAfter: 26, label: withAxes(label), labelGap: 22,
     }))
     drawFlow(page, spaced, layoutFlow(spaced, blocks, top, CONTENT_BOTTOM + 16), labels, ink, grey)
   }
@@ -426,13 +480,13 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
     if (!words.length) words = [adapt('Hamburgefonstiv')].filter(Boolean)
     const wordSizes = [80, 56, 44]
     const blocks = words.map((w, i) => ({ text: w, size: wordSizes[i], fit: true, style: 'Word', leading: 1.15, gapAfter: i === words.length - 1 ? 34 : 14 }))
-    const pangrams = [...new Set(PANGRAMS.map(adapt))].filter(Boolean).slice(0, 4)
+    const pangrams = [...new Set(pangramTexts.map(adapt))].filter(Boolean).slice(0, 4)
     const pSizes = [32, 26, 22, 18]
     pangrams.forEach((p, i) => blocks.push({
       text: p, size: pSizes[i], leading: 1.2, gapAfter: 22, label: 'pt', labelGap: 20, style: 'Pangram',
     }))
     const plan = layoutFlow(face, blocks, CONTENT_TOP, CONTENT_BOTTOM + 16)
-    plan.forEach((b) => { if (b.label === 'pt') b.label = `${Math.round(b.size)} pt` })
+    plan.forEach((b) => { if (b.label === 'pt') b.label = withAxes(`${Math.round(b.size)} pt`) })
     drawFlow(page, face, plan, labels, ink, grey)
   }
 
@@ -440,12 +494,12 @@ export async function buildSpecimen({ buffer, metadata, axisSettings, tracking =
   {
     const page = newPage(4, 'Paragraphs')
     const blocks = [
-      { text: adapt(PARAGRAPHS[0]), size: 22, leading: 1.35, gapAfter: 38, label: 'pt', labelGap: 20, style: 'Paragraph' },
-      { text: adapt(PARAGRAPHS[1]), size: 16, leading: 1.45, gapAfter: 38, label: 'pt', labelGap: 20, style: 'Paragraph' },
-      { text: adapt(PARAGRAPHS[2]), size: 13, leading: 1.5, gapAfter: 0, label: 'pt · two columns', labelGap: 20, columns: true, gutter: 28, style: 'Paragraph' },
+      { text: adapt(paragraphTexts[0]), size: 22, leading: 1.35, gapAfter: 38, label: 'pt', labelGap: 20, style: 'Paragraph' },
+      { text: adapt(paragraphTexts[1]), size: 16, leading: 1.45, gapAfter: 38, label: 'pt', labelGap: 20, style: 'Paragraph' },
+      { text: adapt(paragraphTexts[2]), size: 13, leading: 1.5, gapAfter: 0, label: 'pt · two columns', labelGap: 20, columns: true, gutter: 28, style: 'Paragraph' },
     ].filter((b) => b.text)
     const plan = layoutFlow(face, blocks, CONTENT_TOP, CONTENT_BOTTOM + 16)
-    plan.forEach((b) => { b.label = `${Math.round(b.size)} ${b.label}` })
+    plan.forEach((b) => { b.label = withAxes(`${Math.round(b.size)} ${b.label}`) })
     drawFlow(page, face, plan, labels, ink, grey)
   }
 
@@ -472,4 +526,12 @@ export async function renderPdfPreview(bytes, container) {
     container.appendChild(canvas)
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
   }
+}
+
+/** Opens a font with fontkit (loaded on first use). Used by the sources export. */
+export async function openFont(buffer) {
+  const { createFont } = await loadLibs()
+  let font = createFont(new Uint8Array(buffer))
+  if (font.fonts) font = font.fonts[0]
+  return font
 }

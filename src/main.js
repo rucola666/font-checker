@@ -11,7 +11,8 @@ import { rewriteFontNames, readFontNames } from './font-names.js'
 import { buildIdml } from './idml.js'
 import { setFavicon } from './favicon.js'
 import { makeZip } from './zip.js'
-import { buildSpecimen, renderPdfPreview } from './specimen.js'
+import { buildSpecimen, renderPdfPreview, openFont } from './specimen.js'
+import { buildSources } from './ufo.js'
 
 const $ = (id) => document.getElementById(id)
 
@@ -23,6 +24,7 @@ const workspace = $('workspace')
 const loadBtn = $('load-btn')
 const exportBtn = $('export-btn')
 const idmlBtn = $('idml-btn')
+const ufoBtn = $('ufo-btn')
 
 const fontSize = $('font-size')
 const lineSpacing = $('line-spacing')
@@ -52,6 +54,7 @@ const pdfDownload = $('pdf-download')
 const pdfClose = $('pdf-close')
 
 const PANGRAM = 'The quick brown fox jumps over the lazy dog'
+const PANGRAM_FIGURES = 'The quick brown fox jumps over the lazy dog at 7:45'
 
 let state = null   // { file, buffer, ext, parsed, family, coverageMap }
 let pdfBytes = null
@@ -106,6 +109,7 @@ async function handleFile(file) {
     show(loadBtn)
     show(exportBtn)
     show(idmlBtn)
+    show(ufoBtn)
 
     // info
     const m = parsed.metadata
@@ -199,7 +203,8 @@ function updatePreview() {
 
   const has = (c) => state.coverageMap[c] !== false   // characters we don't check are assumed present
   renderCharacters(charsEl, state.parsed.coverage, style)
-  pangramText.textContent = adaptText(PANGRAM, has)
+  const hasFigures = [...'0123456789'].every((c) => state.coverageMap[c])
+  pangramText.textContent = adaptText(hasFigures ? PANGRAM_FIGURES : PANGRAM, has)
   styleText(pangramText, style)
   previewText.textContent = previewInput.value
   styleText(previewText, style)
@@ -287,6 +292,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !pdfModal.classList.contains('hidden')) closeModal()
 })
 
+function defaultAxisSettings() {
+  const out = {}
+  for (const a of state.parsed.axes || []) out[a.tag] = a.defaultValue
+  return out
+}
+
 /* InDesign export: IDML + fonts in a "Document Fonts" folder, zipped as a folder */
 
 function downloadBlob(blob, filename) {
@@ -308,7 +319,9 @@ idmlBtn.addEventListener('click', async () => {
     const result = await buildSpecimen({
       buffer: state.buffer,
       metadata: m,
-      axisSettings: getFvarSettings(),
+      // InDesign opens variable fonts at their default instance, so the
+      // captions in the IDML describe the default axis values
+      axisSettings: defaultAxisSettings(),
       tracking: parseInt(letterSpacing.value, 10),
     })
     const fontBytes = renamedFont()
@@ -335,5 +348,33 @@ idmlBtn.addEventListener('click', async () => {
     setTimeout(() => { idmlBtn.textContent = label }, 3500)
   } finally {
     idmlBtn.disabled = false
+  }
+})
+
+/* Sources export: .designspace + UFO masters (variable) or one UFO (static) */
+
+ufoBtn.addEventListener('click', async () => {
+  if (!state) return
+  const label = ufoBtn.textContent
+  ufoBtn.disabled = true
+  ufoBtn.textContent = 'Rebuilding sources…'
+  try {
+    const m = currentMetadata()
+    const font = await openFont(state.buffer)
+    const { files, masters, incompatible } = buildSources(font, {
+      family: m.name, style: m.style, author: m.author, license: m.license, manufacturer: m.manufacturer,
+    })
+    if (incompatible.length) console.warn('Glyphs with different structure between masters:', incompatible)
+    const base = safeName(m.name || state.file.name.replace(/\.[^.]+$/, ''))
+    const folder = `${base} sources`
+    downloadBlob(makeZip(files.map((f) => ({ path: `${folder}/${f.path}`, data: f.data }))), `${folder}.zip`)
+    ufoBtn.textContent = masters > 1 ? `Downloaded ✓ (${masters} masters)` : 'Downloaded ✓'
+    setTimeout(() => { ufoBtn.textContent = label }, 3000)
+  } catch (err) {
+    console.error(err)
+    ufoBtn.textContent = 'Sources export failed — try again'
+    setTimeout(() => { ufoBtn.textContent = label }, 3500)
+  } finally {
+    ufoBtn.disabled = false
   }
 })
